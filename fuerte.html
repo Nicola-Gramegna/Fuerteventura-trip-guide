@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Fuerteventura Memories</title>
+    
+    <!-- Librerie Esterne -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+        /* Stili Base e iOS Optimization */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        header { padding-top: max(1rem, env(safe-area-inset-top)); }
+        #itineraryList { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+        #map { height: 35vh; width: 100%; z-index: 1; }
+        .scroll-native { -webkit-overflow-scrolling: touch; }
+        
+        /* UI Elements */
+        .day-btn.active { background-color: #f59e0b; color: white; border-color: #f59e0b; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3); }
+        .timeline-line { position: absolute; left: 24px; top: 0; bottom: 0; width: 2px; background: #e5e7eb; z-index: 0; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Chat Styles */
+        .chat-bubble-user { background-color: #f59e0b; color: white; border-radius: 18px 18px 4px 18px; padding: 10px 14px; max-width: 80%; margin-left: auto; margin-bottom: 8px; font-size: 14px; }
+        .chat-bubble-ai { background-color: #f3f4f6; color: #1f2937; border-radius: 18px 18px 18px 4px; padding: 10px 14px; max-width: 90%; margin-right: auto; margin-bottom: 8px; font-size: 14px; line-height: 1.5; }
+        
+        /* Animations */
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        .spinner { border: 3px solid rgba(0, 0, 0, 0.1); width: 24px; height: 24px; border-radius: 50%; border-left-color: #f59e0b; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-slate-900 text-white px-4 pb-4 shadow-lg flex justify-between items-center z-10">
+        <div>
+            <h1 class="text-xl font-bold text-amber-500 tracking-tight"><i class="fa-solid fa-umbrella-beach mr-2"></i>Fuerteventura</h1>
+            <p class="text-xs text-slate-400 font-medium">Grand Tour • Dicembre 2025</p>
+        </div>
+        <div class="flex gap-2">
+            <!-- Settings Button -->
+            <button onclick="openSettings()" class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-300 hover:text-white transition">
+                <i class="fa-solid fa-gear"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Map Container -->
+    <div id="map" class="shadow-md shrink-0"></div>
+
+    <!-- Day Selector -->
+    <div class="bg-white border-b border-gray-200 z-20 shadow-sm shrink-0">
+        <div class="flex overflow-x-auto p-3 gap-3 no-scrollbar" id="dayButtons"></div>
+    </div>
+
+    <!-- Details List -->
+    <div class="flex-1 overflow-y-auto p-4 relative scroll-native bg-gray-50" id="itineraryList"></div>
+
+    <!-- AI Chat Modal -->
+    <div id="aiModal" class="fixed inset-0 bg-black/60 z-50 hidden items-end sm:items-center justify-center backdrop-blur-sm">
+        <div class="bg-white w-full sm:w-[400px] sm:rounded-2xl rounded-t-2xl shadow-2xl overflow-hidden animate-slide-up flex flex-col h-[85vh] sm:h-[600px]">
+            <div class="w-full flex justify-center pt-3 pb-1 sm:hidden bg-slate-50" onclick="closeModal()">
+                <div class="w-12 h-1.5 bg-gray-300 rounded-full"></div>
+            </div>
+            <div class="bg-slate-50 px-5 py-3 border-b border-gray-100 flex justify-between items-center shrink-0">
+                <h3 class="text-slate-800 font-bold text-lg flex items-center">
+                    <span class="bg-amber-100 text-amber-600 p-1.5 rounded-lg mr-2"><i class="fa-solid fa-robot"></i></span> 
+                    Assistente Viaggio
+                </h3>
+                <button onclick="closeModal()" class="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center hover:bg-gray-300">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div id="chatBody" class="p-4 overflow-y-auto bg-white flex-1 flex flex-col">
+                <div class="chat-bubble-ai">👋 Ciao! Spero vi siate divertiti. Chiedimi info su una tappa per rivivere i ricordi!</div>
+            </div>
+            <div class="p-3 bg-gray-50 border-t border-gray-200 shrink-0 flex gap-2 items-end">
+                <textarea id="userPixelInput" rows="1" placeholder="Scrivi..." class="flex-1 border border-gray-300 rounded-2xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 outline-none resize-none max-h-24 scroll-native"></textarea>
+                <button onclick="sendMessage()" class="w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center hover:bg-amber-600 shadow-md shrink-0 mb-0.5"><i class="fa-solid fa-paper-plane text-sm"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal (API Key) -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/80 z-[60] hidden items-center justify-center p-4 backdrop-blur-md">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-slide-up">
+            <h3 class="text-xl font-bold mb-4 text-slate-800">Impostazioni AI</h3>
+            <p class="text-sm text-gray-600 mb-4">Inserisci una Google Gemini API Key per riattivare la chat (opzionale).</p>
+            <input type="password" id="apiKeyInput" placeholder="Incolla API Key qui" class="w-full border border-gray-300 rounded-lg p-3 mb-4 focus:ring-2 focus:ring-amber-500 outline-none">
+            <div class="flex gap-2">
+                <button onclick="saveApiKey()" class="flex-1 bg-amber-500 text-white font-bold py-2 rounded-lg hover:bg-amber-600">Salva</button>
+                <button onclick="closeSettings()" class="flex-1 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-200">Chiudi</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA DEL VIAGGIO (AGGIORNATA) ---
+        const itinerary = [
+            {
+                day: 1, date: "6 Dic", title: "Arrivo & Dune", hotel: "Villa Mahor", color: "blue",
+                stops: [
+                    { name: "Villa Mahor (La Oliva)", lat: 28.666, lng: -13.914, type: "hotel", icon: "fa-bed", desc: "La base strategica al Nord." },
+                    { name: "Dune di Corralejo", lat: 28.694, lng: -13.843, type: "sunset", icon: "fa-sun", desc: "Tramonto epico sulle dune sahariane." },
+                    { name: "La Playita (Cena)", lat: 28.739, lng: -13.867, type: "food", icon: "fa-utensils", desc: "Cena a base di pesce fresco sul mare." }
+                ]
+            },
+            {
+                day: 2, date: "7 Dic", title: "Surf & Nord", hotel: "Villa Mahor", color: "cyan",
+                stops: [
+                    { name: "Flag Beach (Surf)", lat: 28.718, lng: -13.856, type: "activity", icon: "fa-water", desc: "Mattinata di onde e divertimento." },
+                    { name: "Lajares (Pranzo)", lat: 28.679, lng: -13.935, type: "food", icon: "fa-burger", desc: "Pranzo surf style." },
+                    { name: "Calderón Hondo", lat: 28.697, lng: -13.918, type: "hike", icon: "fa-mountain", desc: "Trekking sul cratere del vulcano." },
+                    { name: "El Cotillo (Tramonto)", lat: 28.682, lng: -14.013, type: "sunset", icon: "fa-sun", desc: "Il sole che cade nell'oceano." }
+                ]
+            },
+            {
+                day: 3, date: "8 Dic", title: "Wild West", hotel: "Ajuy", color: "orange",
+                stops: [
+                    { name: "Tindaya", lat: 28.599, lng: -13.929, type: "view", icon: "fa-eye", desc: "La montagna sacra." },
+                    { name: "Aguas Verdes", lat: 28.473, lng: -14.061, type: "activity", icon: "fa-water", desc: "Piscine naturali (Bassa marea)." },
+                    { name: "Betancuria", lat: 28.424, lng: -14.057, type: "food", icon: "fa-church", desc: "Pranzo nell'antica capitale." },
+                    { name: "Arco de las Peñitas", lat: 28.406, lng: -14.089, type: "hike", icon: "fa-person-hiking", desc: "Trekking tra le rocce." },
+                    { name: "Ajuy (Grotte & Notte)", lat: 28.397, lng: -14.154, type: "sunset", icon: "fa-moon", desc: "Tramonto sulla spiaggia nera e cena alla Jaula de Oro." }
+                ]
+            },
+            {
+                day: 4, date: "9 Dic", title: "Sud & Cofete", hotel: "Morro Jable", color: "purple",
+                stops: [
+                    { name: "La Pared", lat: 28.220, lng: -14.220, type: "view", icon: "fa-binoculars", desc: "Le onde giganti della costa ovest." },
+                    { name: "Sotavento", lat: 28.118, lng: -14.249, type: "activity", icon: "fa-umbrella-beach", desc: "La laguna magica." },
+                    { name: "Occidental Jandia", lat: 28.064, lng: -14.316, type: "hotel", icon: "fa-bed", desc: "Check-in e relax." },
+                    { name: "Cofete (Pomeriggio)", lat: 28.113, lng: -14.375, type: "view", icon: "fa-triangle-exclamation", desc: "Il luogo più selvaggio dell'isola." },
+                    { name: "La Laja (Cena)", lat: 28.050, lng: -14.354, type: "food", icon: "fa-fish", desc: "Cena di pesce a Morro Jable." }
+                ]
+            },
+            {
+                day: 5, date: "10 Dic", title: "Relax & Volo", hotel: "Rientro", color: "red",
+                stops: [
+                    { name: "Playa Matorral", lat: 28.049, lng: -14.329, type: "activity", icon: "fa-umbrella-beach", desc: "Ultimo bagno e shopping." },
+                    { name: "Pozo Negro (Pranzo)", lat: 28.313, lng: -13.910, type: "food", icon: "fa-utensils", desc: "Pranzo vista mare in pace." },
+                    { name: "Salinas del Carmen", lat: 28.365, lng: -13.874, type: "view", icon: "fa-camera", desc: "Ultima foto allo scheletro della balena." },
+                    { name: "Aeroporto FUE", lat: 28.452, lng: -13.869, type: "flight", icon: "fa-plane", desc: "Fine del viaggio." }
+                ]
+            }
+        ];
+
+        // --- MAP & RENDER ---
+        const map = L.map('map', { zoomControl: false }).setView([28.40, -14.00], 9);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+        let currentLayerGroup = L.layerGroup().addTo(map);
+
+        const listContainer = document.getElementById('itineraryList');
+        const dayButtonsContainer = document.getElementById('dayButtons');
+
+        function loadDay(index) {
+            document.querySelectorAll('.day-btn').forEach((btn, i) => {
+                btn.classList.toggle('active', i === index);
+                btn.classList.toggle('bg-white', i !== index);
+                if(i===index) btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            });
+
+            currentLayerGroup.clearLayers();
+            listContainer.innerHTML = '<div class="timeline-line"></div>';
+            
+            const day = itinerary[index];
+            const markers = [];
+
+            // Add Chat Button for Day
+            const chatBtnDiv = document.createElement('div');
+            chatBtnDiv.className = "mb-6 relative z-10";
+            chatBtnDiv.innerHTML = `
+                <button onclick="openChat('${day.title}')" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white p-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 active:scale-95 transition">
+                    <i class="fa-regular fa-comments"></i> Chat del Giorno
+                </button>
+            `;
+            listContainer.appendChild(chatBtnDiv);
+
+            day.stops.forEach((stop, i) => {
+                const markerHtml = `<div class="w-7 h-7 rounded-full border-2 border-white shadow-lg flex items-center justify-center text-sm font-bold text-white" style="background-color: ${getColorCode(day.color)}">${i + 1}</div>`;
+                const icon = L.divIcon({ className: 'custom-div-icon', html: markerHtml, iconSize: [28, 28], iconAnchor: [14, 14] });
+                const marker = L.marker([stop.lat, stop.lng], { icon: icon }).bindPopup(`<b>${stop.name}</b>`);
+                currentLayerGroup.addLayer(marker);
+                markers.push([stop.lat, stop.lng]);
+
+                const item = document.createElement('div');
+                item.className = "relative pl-10 pb-8 last:pb-2";
+                item.innerHTML = `
+                    <div class="absolute left-4 top-1 w-4 h-4 rounded-full border-2 border-white shadow-sm flex items-center justify-center z-10" style="background-color: ${getColorCode(day.color)}; transform: translateX(-50%);"></div>
+                    <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100" onclick="map.flyTo([${stop.lat}, ${stop.lng}], 13)">
+                        <div class="flex justify-between items-start mb-1">
+                            <h3 class="font-bold text-slate-800 text-lg w-[90%]">${stop.name}</h3>
+                            <i class="fa-solid ${stop.icon} text-gray-300"></i>
+                        </div>
+                        <p class="text-sm text-slate-600 mb-3">${stop.desc}</p>
+                        <a href="http://maps.apple.com/?daddr=${stop.lat},${stop.lng}&dirflg=d" class="inline-flex items-center text-xs font-bold text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
+                            <i class="fa-solid fa-location-arrow mr-2"></i> Naviga
+                        </a>
+                    </div>
+                `;
+                listContainer.appendChild(item);
+            });
+            if(markers.length) map.fitBounds(markers, { padding: [40, 40] });
+        }
+
+        function getColorCode(c) { const colors = { 'blue': '#3b82f6', 'cyan': '#06b6d4', 'orange': '#f97316', 'purple': '#8b5cf6', 'red': '#ef4444' }; return colors[c] || '#6b7280'; }
+
+        // --- GEMINI CHAT LOGIC ---
+        let userApiKey = localStorage.getItem("gemini_api_key") || ""; 
+        let chatHistory = [];
+
+        async function callGemini(msg) {
+            if (!userApiKey) { openSettings(); return "⚠️ Inserisci la tua API Key nelle impostazioni per chattare."; }
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${userApiKey}`;
+            chatHistory.push({ role: "user", parts: [{ text: msg }] });
+
+            try {
+                const res = await fetch(url, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: chatHistory })
+                });
+                const data = await res.json();
+                const aiMsg = data.candidates[0].content.parts[0].text;
+                chatHistory.push({ role: "model", parts: [{ text: aiMsg }] });
+                return aiMsg;
+            } catch (e) { return "Errore di connessione."; }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userPixelInput');
+            const msg = input.value.trim();
+            if(!msg) return;
+            
+            addBubble(msg, 'user');
+            input.value = "";
+            
+            const loadingId = addBubble("...", 'ai');
+            const response = await callGemini(msg);
+            document.getElementById(loadingId).innerHTML = marked.parse(response);
+        }
+
+        function addBubble(text, type) {
+            const div = document.createElement('div');
+            div.className = type === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai';
+            div.innerHTML = text;
+            div.id = 'msg-' + Date.now();
+            document.getElementById('chatBody').appendChild(div);
+            document.getElementById('chatBody').scrollTop = document.getElementById('chatBody').scrollHeight;
+            return div.id;
+        }
+
+        // --- UI UTILS ---
+        function openChat(context) { 
+            document.getElementById('aiModal').classList.remove('hidden'); 
+            document.getElementById('aiModal').classList.add('flex');
+            if(chatHistory.length === 0) chatHistory.push({role: "user", parts:[{text: `Contesto: Viaggio a Fuerteventura concluso. Utente sta rivedendo il giorno: ${context}.`}]});
+        }
+        function closeModal() { document.getElementById('aiModal').classList.add('hidden'); document.getElementById('aiModal').classList.remove('flex'); }
+        function openSettings() { document.getElementById('settingsModal').classList.remove('hidden'); document.getElementById('settingsModal').classList.add('flex'); document.getElementById('apiKeyInput').value = userApiKey; }
+        function closeSettings() { document.getElementById('settingsModal').classList.add('hidden'); document.getElementById('settingsModal').classList.remove('flex'); }
+        function saveApiKey() { 
+            const k = document.getElementById('apiKeyInput').value.trim();
+            if(k) { localStorage.setItem("gemini_api_key", k); userApiKey = k; closeSettings(); alert("Salvata!"); }
+        }
+
+        // --- INIT ---
+        itinerary.forEach((day, index) => {
+            const btn = document.createElement('button');
+            btn.className = `day-btn whitespace-nowrap px-5 py-2.5 rounded-full border text-sm font-semibold transition-all duration-200 snap-center`;
+            btn.innerHTML = `${day.date}`;
+            btn.onclick = () => loadDay(index);
+            dayButtonsContainer.appendChild(btn);
+        });
+        loadDay(0);
+    </script>
+</body>
+</html>
