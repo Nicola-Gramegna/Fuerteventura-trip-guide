@@ -2,7 +2,7 @@
 
 Un'applicazione web interattiva (PWA-like) creata per gestire l'itinerario di viaggio a Fuerteventura, sostituendo i classici PDF o note sparse con qualcosa di più dinamico e divertente.
 
-🔗 **[Vedi la Demo qui](https://tuonome.github.io/fuerteventura-trip/)** *(Inserisci qui il tuo link GitHub Pages una volta attivo)*
+🔗 **[Vedi la Demo qui](https://Nicola-Gramegna.github.io/fuerteventura-trip-guide/)** *(Inserisci qui il tuo link GitHub Pages una volta attivo)*
 
 ## 🧐 Di cosa si tratta?
 Questo progetto è nato dall'esigenza di avere un itinerario "tascabile" per me e i miei compagni di viaggio. Invece di scorrere infinite chat di WhatsApp per trovare la posizione del ristorante o l'orario del traghetto, ho racchiuso tutto in un'unica interfaccia web ottimizzata per iPhone.
